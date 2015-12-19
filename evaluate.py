@@ -10,8 +10,6 @@
 import requests
 import ConfigParser
 from bs4 import BeautifulSoup
-import sys, os
-import re
 
 class UCASEvaluate:
     def __init__(self):

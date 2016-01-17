@@ -55,7 +55,8 @@ class UCASEvaluate:
         response = self.s.get(self.courseSelectionPage, headers=self.headers)
         soup = BeautifulSoup(response.text)
         #print(response.text.encode('utf8'))
-        coursePage = self.studentCourseIndentify + soup.noscript.contents[0].strip().split('Identity=')[1][:-2]
+        indentity = str(soup.noscript).split('Identity=')[1].split('"'[0])[0]
+        coursePage = self.studentCourseIndentify + indentity
         response = self.s.get(coursePage)
         response = self.s.get(self.studentCourseTop)
         soup = BeautifulSoup(response.text)

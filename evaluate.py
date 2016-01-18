@@ -11,9 +11,14 @@ import requests
 import ConfigParser
 from bs4 import BeautifulSoup
 import re
+import sys
+reload(sys)
+sys.setdefaultencoding('utf8')
 
 class UCASEvaluate:
     def __init__(self):
+        self.__readCoursesId()
+        self.enrollCount = {}
         cf= ConfigParser.RawConfigParser()
         cf.read('config')
         self.username=cf.get('info', 'username')
@@ -27,6 +32,7 @@ class UCASEvaluate:
         self.studentCourseIndentify="http://jwjz.ucas.ac.cn/Student/Portal.aspx?Identity="
         self.studentCourseTop="http://jwjz.ucas.ac.cn/Student/DeskTopModules/TopHead.aspx"
         self.studentCourseEvaluateUrl="http://jwjz.ucas.ac.cn/Student/DeskTopModules/"
+        self.selectCourseUrl = "http://jwjz.ucas.ac.cn/Student/DesktopModules/Course/SelectCourse.aspx"
         self.headers = {
                 'Host': 'sep.ucas.ac.cn',
                 'Connection': 'keep-alive',
@@ -55,38 +61,104 @@ class UCASEvaluate:
             return True
         return False
     
-    def parseCourseId(self):
-        departid = []
-        for id in self.courseId:
-            departid.append(int(id[0:2]))
-        return departid
+    def __readCoursesId(self):
+        coursesFile = open('./courseid', 'r')
+        self.coursesId = {}
+        for line in coursesFile.readlines():
+            line = line.strip().split(':')
+            courseId = line[0]
+            isDegree = False
+            if len(line) == 2 and line[1] == "on":
+                isDegree = True
+            self.coursesId[courseId] = isDegree
 
-    def enrollDepart(self):
+    def enrollCourses(self):
         response = self.s.get(self.courseSelectionPage, headers=self.headers)
         soup = BeautifulSoup(response.text)
         #print(response.text.encode('utf8'))
-        indentity = str(soup.noscript).split('Identity=')[1].split('"'[0])[0]
-        coursePage = self.studentCourseIndentify + indentity
-        response = self.s.get(coursePage)
-        response = self.s.get(self.studentCourseTop)
-        soup = BeautifulSoup(response.text)
-        listLi = (str)(soup.select('div[class="Menubox"]')[0]).split('SwichClass(this,"MainFrame",')
-        enrollCouseUrl = self.studentCourseEvaluateUrl + listLi[1].split('"')[1]
-        response = self.s.get(enrollCouseUrl)
-        soup = BeautifulSoup(response.text)
-        response = self.s.post('http://jwjz.ucas.ac.cn/Student/DesktopModules/Course/SelectCourse.aspx?CourseTypeString=' +\
-                '9')
-        soup = BeautifulSoup(response.text)
-        courses = soup.body.form.table.contents
-        print(courses)
-        #print(response.text.encode('utf8'))
-        for course in courses:
-            course = course.toString()
-            p = re.compile(r'height="([0-9]*)"')
-            match = p.match(course)
-            if match:
-                print(match.group(1))
+        try:
+            indentity = str(soup.noscript).split('Identity=')[1].split('"'[0])[0]
+            coursePage = self.studentCourseIndentify + indentity
+            response = self.s.get(coursePage)
+            response = self.s.get(self.studentCourseTop)
+            soup = BeautifulSoup(response.text)
+            listLi = (str)(soup.select('div[class="Menubox"]')[0]).split('SwichClass(this,"MainFrame",')
+            enrollCouseUrl = self.studentCourseEvaluateUrl + listLi[1].split('"')[1]
+            response = self.s.get(enrollCouseUrl)
+            soup = BeautifulSoup(response.text)
+            urlSession = (str)(soup.body.form['action']).strip().split('=')[1]
+            coursesId = self.coursesId.copy()
+            
+            while len(coursesId) > 0:
+                for eachCourse in coursesId.keys():
+                    if eachCourse in response.text:
+                        print("course " + eachCourse + " is in your coursetable")
+                        del coursesId[eachCourse]
+                        continue
+                    if self.enrollCount.has_key(eachCourse):
+                        self.enrollCount[eachCourse] += 1
+                    else:
+                        self.enrollCount[eachCourse] = 1
+                    result = self.__enrollCourse(urlSession, eachCourse, coursesId[eachCourse], self.enrollCount[eachCourse])
+                    if result:
+                        del coursesId[eachCourse]
+        except Exception as e:
+            print("system error")
+            print e
+            #self.enrollCourses()
+            pass
+        except KeyboardInterrupt:
+            print("Bye")
+    
+        
+        
+        
 
+
+    def __enrollCourse(self, urlSession, courseId, isDegree, count):
+        
+        selectCourseUrl = self.selectCourseUrl + "?CourseTypeString=" + courseId[:2] + "&s=" + urlSession
+        response = self.s.get(selectCourseUrl)
+        soup = BeautifulSoup(response.text)
+        
+        postData = {}
+        postData['__VIEWSTATE'] = soup.find(attrs={"name": "__VIEWSTATE"})['value']
+        postData['__VIEWSTATEGENERATOR'] = soup.find(attrs={"name": "__VIEWSTATEGENERATOR"})['value']
+        postData['__EVENTVALIDATION'] = soup.find(attrs={"name": "__EVENTVALIDATION"})['value']
+        
+        dataTable = soup.body.form.table.contents[1].find_all('tr')
+        courseName = "存放当前需要选择的课程"
+        for course in dataTable:
+            if courseId in course.text:
+                codeLink = course.find(id=re.compile('_CodeLink'))
+                if courseId != codeLink.string:
+                    continue
+                courseCheckBoxName = course.find(id=re.compile('_ItemCheckBox'))['name']
+                degreeCheckBoxName = course.find(id=re.compile('_DegreeCheckBox'))['name']
+                courseName = course.find(id=re.compile('_NameLink')).string
+                
+                postData[courseCheckBoxName] = "on"
+                if isDegree:
+                    postData[degreeCheckBoxName] = "on"
+                print("select " + courseName + "..." + str(count) + " times")
+    
+        if len(postData) == 3:
+            print "no such course"
+            return True
+        postData['SureBtn'] = "确定提交选课"
+        
+        
+        response = self.s.post(selectCourseUrl, data = postData)
+        soup = BeautifulSoup(response.text)
+        
+        if soup.head.find('script') == None:
+            if courseName in response.text:
+                print("choose success")
+                return True
+            print("course full")
+            return False
+        print soup.head.find('script').string.split('"')[1]
+        return False
 
     def getCourse(self):
         response = self.s.get(self.courseSelectionPage, headers=self.headers)
@@ -149,6 +221,7 @@ class UCASEvaluate:
                 postData['tbSuggest'] = ''
                 postData['tbFlaw'] = ''
                 postData['btnSave'] = "保存我的评论"
+        
         response = self.s.post(evaluateUrl, data = postData)
         if (response.text.encode('utf-8').find("<script>alert('恭喜您，提交对该课程的评论成功……')</script>") != -1):
             print('evaluate success...')
@@ -171,7 +244,7 @@ if __name__=="__main__":
     print('login success')
     if ucasEvaluate.enroll:
         print('Enrolling course...\n')
-        ucasEvaluate.enrollDepart()
+        ucasEvaluate.enrollCourses()
     if ucasEvaluate.evaluate:
         print('Evaluating course...\n')
         ucasEvaluate.getCourse()

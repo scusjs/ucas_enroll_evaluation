@@ -1,4 +1,4 @@
-# ucas_evaluate
+# ucas_enroll_evaluation
 中国科学院大学自动评教脚本
 ===
 需要Python2.7环境，依赖Beautifulsoup和Requests，通过如下命令可安装

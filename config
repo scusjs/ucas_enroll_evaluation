@@ -1,3 +1,7 @@
 [info]
-username=
-password=
+username = 
+password = 
+
+[action]
+enroll = true 
+evaluate = false 

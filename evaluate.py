@@ -10,6 +10,7 @@
 import requests
 import ConfigParser
 from bs4 import BeautifulSoup
+import re
 
 class UCASEvaluate:
     def __init__(self):
@@ -18,6 +19,8 @@ class UCASEvaluate:
         self.username=cf.get('info', 'username')
         self.password=cf.get('info', 'password')
         self.loginUrl="http://sep.ucas.ac.cn/slogin"
+        self.enroll = cf.getboolean('action', 'enroll')
+        self.evaluate = cf.getboolean('action', 'evaluate')
         self.loginPage="http://sep.ucas.ac.cn"
         self.courseSelectionPage="http://sep.ucas.ac.cn/portal/site/226/821"
         self.studentCourseSelectionSystem="http://jwjz.ucas.ac.cn/Student/"
@@ -39,6 +42,7 @@ class UCASEvaluate:
         self.s = requests.Session()
         loginPage = self.s.get(self.loginPage, headers=self.headers)
         self.cookies = loginPage.cookies
+        self.courseId = open("courseid", "r").read().splitlines();
 
     def login(self):
         postdata = {
@@ -50,6 +54,39 @@ class UCASEvaluate:
         if self.s.cookies.get_dict().has_key('sepuser'):
             return True
         return False
+    
+    def parseCourseId(self):
+        departid = []
+        for id in self.courseId:
+            departid.append(int(id[0:2]))
+        return departid
+
+    def enrollDepart(self):
+        response = self.s.get(self.courseSelectionPage, headers=self.headers)
+        soup = BeautifulSoup(response.text)
+        #print(response.text.encode('utf8'))
+        indentity = str(soup.noscript).split('Identity=')[1].split('"'[0])[0]
+        coursePage = self.studentCourseIndentify + indentity
+        response = self.s.get(coursePage)
+        response = self.s.get(self.studentCourseTop)
+        soup = BeautifulSoup(response.text)
+        listLi = (str)(soup.select('div[class="Menubox"]')[0]).split('SwichClass(this,"MainFrame",')
+        enrollCouseUrl = self.studentCourseEvaluateUrl + listLi[1].split('"')[1]
+        response = self.s.get(enrollCouseUrl)
+        soup = BeautifulSoup(response.text)
+        response = self.s.post('http://jwjz.ucas.ac.cn/Student/DesktopModules/Course/SelectCourse.aspx?CourseTypeString=' +\
+                '9')
+        soup = BeautifulSoup(response.text)
+        courses = soup.body.form.table.contents
+        print(courses)
+        #print(response.text.encode('utf8'))
+        for course in courses:
+            course = course.toString()
+            p = re.compile(r'height="([0-9]*)"')
+            match = p.match(course)
+            if match:
+                print(match.group(1))
+
 
     def getCourse(self):
         response = self.s.get(self.courseSelectionPage, headers=self.headers)
@@ -132,11 +169,16 @@ if __name__=="__main__":
         print('login error, please check your username and password')
         exit()
     print('login success')
-    ucasEvaluate.getCourse()
-    if len(ucasEvaluate.courseDict) == 0:
-        print('there is no course need to be evaluated')
-        exit()
-    print((str)(len(ucasEvaluate.courseDict)) + ' courses need to be evaluated...')
-    ucasEvaluate.evaluateCourse()
+    if ucasEvaluate.enroll:
+        print('Enrolling course...\n')
+        ucasEvaluate.enrollDepart()
+    if ucasEvaluate.evaluate:
+        print('Evaluating course...\n')
+        ucasEvaluate.getCourse()
+        if len(ucasEvaluate.courseDict) == 0:
+            print('there is no course need to be evaluated')
+            exit()
+        print((str)(len(ucasEvaluate.courseDict)) + ' courses need to be evaluated...')
+        ucasEvaluate.evaluateCourse()
 
 

@@ -19,3 +19,14 @@ evaluate设置为true表示评教
 > - 091M5023H:on
 > - 091M4002H
 > - 表示091M5023H作为学位课选课，091M4002H只进行普通选课
+
+
+Ubuntu系统下脚本可能会出现“no such course”的错误，即使填入的courseid是正确的，可以通过如下方法来修复：
+
+  bash> sudo locale-gen en_US.UTF-8
+  
+  bash> export LC_ALL=en_US.UTF-8
+  
+  bash> python evaluate.py
+  
+  Bingo

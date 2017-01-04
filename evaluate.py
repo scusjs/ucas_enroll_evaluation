@@ -21,6 +21,8 @@ class UCASEvaluate:
         self.password = cf.get('info', 'password')
         self.enroll = cf.getboolean('action', 'enroll')
         self.evaluate = cf.getboolean('action', 'evaluate')
+        print('Hi, username: ' + self.username)
+        print('Password: ' + '*' * len(self.password))
 
         self.loginPage = 'http://sep.ucas.ac.cn'
         self.loginUrl = self.loginPage + '/slogin'
@@ -52,16 +54,27 @@ class UCASEvaluate:
         loginPage = self.s.get(self.loginPage, headers=self.headers)
         self.cookies = loginPage.cookies
 
-    def login(self):
-        postdata = {
-            'userName': self.username,
-            'pwd': self.password,
-            'sb': 'sb'
-        }
-        self.s.post(self.loginUrl, data=postdata, headers=self.headers)
-        if 'sepuser' in self.s.cookies.get_dict():
+    def networkUnstable(self, response):
+        if response.status_code != requests.codes.ok:
+            if response.status_code == requests.codes.moved_permanently:
+                self.login()
+                print('Relogin')
             return True
         return False
+
+    def login(self):
+        while True:
+            postdata = {
+                'userName': self.username,
+                'pwd': self.password,
+                'sb': 'sb'
+            }
+            status = self.s.post(self.loginUrl, data=postdata, headers=self.headers)
+            if status.status_code != requests.codes.ok:
+                continue
+            if 'sepuser' in self.s.cookies.get_dict():
+                return True
+            return False
 
     def __readCoursesId(self):
         coursesFile = open('./courseid', 'r')
@@ -75,7 +88,17 @@ class UCASEvaluate:
             self.coursesId[courseId] = isDegree
 
     def enrollCourses(self):
-        response = self.s.get(self.courseSystem, headers=self.headers)
+        while True:
+            response = self.s.get(self.courseSelectionBase)
+            if self.networkUnstable(response):
+                continue
+            break
+        while True:
+            response = self.s.get(self.courseSystem, headers=self.headers)
+            if self.networkUnstable(response):
+                continue
+            print('Course System')
+            break
         soup = BeautifulSoup(response.text, 'html.parser')
         if debug:
             print(response.text)
@@ -83,8 +106,15 @@ class UCASEvaluate:
         try:
             identity = str(soup).split('Identity=')[1].split('"'[0])[0]
             coursePage = self.courseIdentify + identity
-            response = self.s.get(coursePage)
-            response = self.s.get(self.courseSelected)
+            while True:
+                response = self.s.get(coursePage)
+                if self.networkUnstable(response):
+                    continue
+                response = self.s.get(self.courseSelected)
+                if self.networkUnstable(response):
+                    continue
+                print('Course Selected')
+                break
             if debug:
                 print(response.text)
                 exit()
@@ -107,7 +137,7 @@ class UCASEvaluate:
                     if self.enrollCount[enroll] == 0:
                         self.coursesId.pop(enroll)
                 self.enrollCount.clear()
-                if not self.courseId:
+                if not self.coursesId:
                     return
         except KeyboardInterrupt:
             print("Bye")
@@ -117,7 +147,12 @@ class UCASEvaluate:
             exit()
 
     def __enrollCourse(self, courseId, isDegree):
-        response = self.s.get(self.courseSelectionBase)
+        print('Enroll ' + courseId + ' Start')
+        while True:
+            response = self.s.get(self.courseSelectionBase)
+            if self.networkUnstable(response):
+                continue
+            break
         if debug:
             print(response.text)
             exit()
@@ -133,7 +168,11 @@ class UCASEvaluate:
             'sb': 0
         }
         categoryUrl = self.courseCategory + identity
-        response = self.s.post(categoryUrl, data=postdata)
+        while True:
+            response = self.s.post(categoryUrl, data=postdata)
+            if self.networkUnstable(response):
+                continue
+            break
         if debug:
             print(response.text)
             exit()
@@ -152,7 +191,11 @@ class UCASEvaluate:
                 postdata['did_' + courseDict[courseId]] = courseDict[courseId]
 
             courseSaveUrl = self.courseSave + identity
-            response = self.s.post(courseSaveUrl, data=postdata)
+            while True:
+                response = self.s.post(courseSaveUrl, data=postdata)
+                if self.networkUnstable(response):
+                    continue
+                break
             if debug:
                 print(response.text)
                 exit()

@@ -7,6 +7,7 @@
 import requests
 from configparser import RawConfigParser
 from bs4 import BeautifulSoup
+import time
 
 debug = False
 
@@ -21,6 +22,7 @@ class UCASEvaluate:
         self.password = cf.get('info', 'password')
         self.enroll = cf.getboolean('action', 'enroll')
         self.evaluate = cf.getboolean('action', 'evaluate')
+        self.idle = cf.get('idle', 'time')
         print('Hi, username: ' + self.username)
         print('Password: ' + '*' * len(self.password))
 
@@ -87,7 +89,11 @@ class UCASEvaluate:
                 isDegree = True
             self.coursesId[courseId] = isDegree
 
-    def enrollCourses(self):
+    def enrollCourses(self, idle=3):
+        try:
+            idle = abs(int(self.idle))
+        except:
+            print('Idle Error and use the default idle time %d secs.' % idle)
         while True:
             response = self.s.get(self.courseSelectionBase)
             if self.networkUnstable(response):
@@ -123,6 +129,7 @@ class UCASEvaluate:
                 for eachCourse in self.coursesId:
                     if eachCourse in response.text:
                         print("Course " + eachCourse + " has been selected.")
+                        self.enrollCount[eachCourse] = 0
                         continue
                     if (eachCourse in self.enrollCount and
                             self.enrollCount[eachCourse] == 0):
@@ -132,6 +139,7 @@ class UCASEvaluate:
                                                  self.coursesId[eachCourse])
                     if result:
                         self.enrollCount[eachCourse] = 0
+                    time.sleep(idle)
 
                 for enroll in self.enrollCount:
                     if self.enrollCount[enroll] == 0:
@@ -158,8 +166,14 @@ class UCASEvaluate:
             exit()
 
         soup = BeautifulSoup(response.text, 'html.parser')
-        categories = dict([(label.contents[0][:2], label['for'][3:])
-                          for label in soup.find_all('label')[2:]])
+        labels = [(label.contents[0][:2], label['for'][3:])
+                  for label in soup.find_all('label')[2:]]
+        categories = dict()
+        for label in labels:
+            if label[0] in categories:
+                categories[label[0]] += ',' + label[1]
+            else:
+                categories[label[0]] = label[1]
         categoryId = categories[courseId[:2]]
         identity = soup.form['action'].split('=')[1]
 

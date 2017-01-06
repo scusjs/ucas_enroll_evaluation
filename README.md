@@ -25,12 +25,16 @@ password =
 [action]
 enroll = true
 evaluate = false
+
+[idle]
+time = 3
 ```
 
 其中
 
 - enroll设置为true表示选课
 - evaluate设置为true表示评教
+- time代表每次请求的时间间隔，0代表无间隔，默认为3，单位为秒，且必须为非负整数
 
 在目录下新建 `courseid` 文件并填入课程，格式如下：
 

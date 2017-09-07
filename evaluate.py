@@ -7,7 +7,6 @@
 import requests
 from configparser import RawConfigParser
 from bs4 import BeautifulSoup
-from CollegeCode import CollegeCode
 import time
 
 debug = False
@@ -175,8 +174,7 @@ class UCASEvaluate:
                 categories[label[0]] += ',' + label[1]
             else:
                 categories[label[0]] = label[1]
-        # categoryId = categories[courseId[:2]]
-        categoryId = categories[CollegeCode[courseId[:2]]]
+        categoryId = categories[courseId[:2]]
         identity = soup.form['action'].split('=')[1]
 
         postdata = {

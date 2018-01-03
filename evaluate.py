@@ -215,7 +215,9 @@ class UCASEvaluate:
             if debug:
                 print(response.text)
                 exit()
-            if 'class="error' not in response.text:
+            tmp = BeautifulSoup(response.text, 'html.parser')
+            flag = tmp.find('div', attrs={'id': 'messageBoxError'})
+            if 'hide' in flag['class']:
                 print('[Success] ' + courseId)
                 return True
             else:

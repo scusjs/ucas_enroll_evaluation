@@ -2,3 +2,4 @@
 config
 courseid
 __pycache__
+.idea/*

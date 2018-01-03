@@ -40,7 +40,15 @@ class UCASEvaluate:
         self.studentCourseEvaluateUrl = 'http://jwjz.ucas.ac.cn/Student/DeskTopModules/'
         self.selectCourseUrl = 'http://jwjz.ucas.ac.cn/Student/DesktopModules/Course/SelectCourse.aspx'
 
+        self.evaluateIndex = 'http://jwxk.ucas.ac.cn/evaluate/52574'
+        self.evaluateBase = 'http://jwxk.ucas.ac.cn/evaluate/evaluate/'
+        self.evaluateSave = 'http://jwxk.ucas.ac.cn/evaluate/save/{}?s={}'
+        self.merit = cf.get('comment', 'merit')
+        self.flaw = cf.get('comment', 'flaw')
+        self.suggest = cf.get('comment', 'suggest')
+
         self.enrollCount = {}
+        self.evaluateCount = {}
         self.headers = {
             'Host': 'sep.ucas.ac.cn',
             'Connection': 'keep-alive',
@@ -227,6 +235,93 @@ class UCASEvaluate:
             print("No such course")
             return True
 
+    def evaluateCourses(self):
+        try:
+            idle = abs(int(self.idle))
+        except:
+            print('Idle Error and use the default idle time %d secs.' % idle)
+        while True:
+            response = self.s.get(self.courseSelectionBase)
+            if self.networkUnstable(response):
+                continue
+            break
+        soup = BeautifulSoup(response.text, 'html.parser')
+        links = soup.find_all('a')
+        for link in links:
+            if 'href' in link.attrs.keys() and 'evaluate' in link['href']:
+                self.evaluateIndex = link['href']
+                break
+        while True:
+            response = self.s.get(self.courseBase + self.evaluateIndex)
+            if self.networkUnstable(response):
+                continue
+            break
+        try:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            links = soup.find_all('a', attrs={'class': 'btn'})
+            self.evaluateCourseIds = []
+            for link in links:
+                self.evaluateCourseIds.append(link['href'].split('/')[-1])
+            while True:
+                for courseId in self.evaluateCourseIds:
+                    if (courseId in self.evaluateCount and
+                            self.evaluateCount[courseId] == 0):
+                        continue
+                    self.evaluateCount[courseId] = 1
+                    result = self.__evaluateCourse(courseId)
+                    if result:
+                        self.evaluateCount[courseId] = 0
+                    time.sleep(idle)
+
+                for enroll in self.evaluateCount:
+                    if self.evaluateCount[enroll] == 0:
+                        self.evaluateCourseIds.remove(enroll)
+                self.evaluateCount.clear()
+                if not self.evaluateCourseIds:
+                    return
+        except KeyboardInterrupt:
+            print("Bye")
+        except Exception as exception:
+            print("System error")
+            print(exception)
+            exit()
+
+    def __evaluateCourse(self, courseId):
+        while True:
+            response = self.s.get(self.evaluateBase + courseId)
+            if self.networkUnstable(response):
+                continue
+            break
+        s = response.text.split('?s=')[-1].split('"')[0]
+        soup = BeautifulSoup(response.text, 'html.parser')
+        radios = soup.find_all('input', attrs={'type': 'radio'})
+        value = radios[0]['value']
+        data = {}
+        for radio in radios:
+            data[radio['name']] = value
+        data['starFlag'] = 5
+        data['merit'] = self.merit
+        data['flaw'] = self.flaw
+        data['suggest'] = self.suggest
+        while True:
+            response = self.s.post(self.evaluateSave.format(courseId, s), data=data)
+            if self.networkUnstable(response):
+                continue
+            break
+        tmp = BeautifulSoup(response.text, 'html.parser')
+        flag = tmp.find('div', attrs={'id': 'messageBoxError'})
+        if 'hide' in flag['class']:
+            print('[Success] ' + courseId)
+            return True
+        else:
+            print('[Fail] ' + courseId)
+            return False
+        return True
+
+
+
+
+
 
 if __name__ == "__main__":
     ucasEvaluate = UCASEvaluate()
@@ -240,3 +335,8 @@ if __name__ == "__main__":
         print('Enrolling start')
         ucasEvaluate.enrollCourses()
         print('Enrolling finish')
+
+    if ucasEvaluate.evaluate:
+        print('Evaluating start')
+        ucasEvaluate.evaluateCourses()
+        print('Evaluating finish')
